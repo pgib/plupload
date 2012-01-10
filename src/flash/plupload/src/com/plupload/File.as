@@ -48,6 +48,7 @@ package com.plupload {
 		private var _id:String, _fileName:String, _size:Number, _imageData:ByteArray;
 		private var _multipart:Boolean, _fileDataName:String, _chunking:Boolean, _chunk:int, _chunks:int, _chunkSize:int, _postvars:Object;
 		private var _headers:Object, _settings:Object;
+		private var _resumable:Boolean;
 
 		/**
 		 * Id property of file.
@@ -75,6 +76,14 @@ package com.plupload {
 		 */
 		public function get size():Number {
 			return this._size;
+		}
+		
+		public function get resumable():Boolean {
+			return this._resumable;
+		}
+
+		public function set resumable(value:Boolean):void {
+			this._resumable = value;
 		}
 
 		/**
@@ -114,8 +123,10 @@ package com.plupload {
 			this._settings = settings;
 
 			if (this.canUseSimpleUpload(settings)) {
+				Plupload.debug("Using simple upload");
 				this.simpleUpload(url, settings);
 			} else {
+				Plupload.debug("Using advanced upload");
 				this.advancedUpload(url, settings);
 			}
 		}
@@ -224,6 +235,9 @@ package com.plupload {
 			this._cancelled = false;
 			this._headers = settings.headers;
 			this._mimeType = settings.mime;
+			this._resumable = new Boolean(settings.resumable);
+			
+			Plupload.debug("Resumable: " + this._resumable);
 
 			multipart = new Boolean(settings["multipart"]);
 			fileDataName = new String(settings["file_data_name"]);
@@ -327,7 +341,7 @@ package com.plupload {
 
 				return false;
 			}
-
+			
 			// Slice out a chunk
 			chunkData = new ByteArray();
 
@@ -337,7 +351,20 @@ package com.plupload {
 			else
 				fileData = this._fileRef.data;
 
+			Plupload.debug("At chunk " + this._chunk + "/" + this._chunks)
+			Plupload.debug("Starting at file position: " + fileData.position);
+			if (this._headers) {
+				this._headers["X-Content-Range"] = "bytes " + fileData.position + "-" + (fileData.position + this._chunkSize - 1 > fileData.length ? (fileData.length - 1) : fileData.position + this._chunkSize - 1) + "/" + (fileData.length - 1);
+				Plupload.debug("X-Content-Range: " + this._headers["X-Content-Range"])
+			}
+
 			fileData.readBytes(chunkData, 0, fileData.position + this._chunkSize > fileData.length ? fileData.length - fileData.position : this._chunkSize);
+			
+			Plupload.debug("fileData length " + fileData.length + "; bytesAvailable: " + fileData.bytesAvailable);
+			Plupload.debug("chunkData length " + chunkData.length + "; bytesAvailable: " + chunkData.bytesAvailable);
+
+
+
 
 			// Setup URL stream
 			file._urlStream = new URLStream();
@@ -386,7 +413,8 @@ package com.plupload {
 			url = this._uploadUrl;
 
 			// Add name and chunk/chunks to URL if we use direct streaming method
-			if (!this._multipart) {
+			if (!this._multipart && !this._resumable) {
+				Plupload.debug("Messing up the URL");
 				if (url.indexOf('?') == -1)
 					url += '?';
 				else
@@ -406,6 +434,7 @@ package com.plupload {
 			// Add custom headers
 			if (this._headers) {
 				for (var headerName:String in this._headers) {
+					Plupload.debug("Header: " + headerName + ": " + this._headers[headerName]);
 					req.requestHeaders.push(new URLRequestHeader(headerName, this._headers[headerName]));
 				}
 			}
