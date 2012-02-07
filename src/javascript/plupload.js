@@ -1290,6 +1290,22 @@
 				}
 			},
 
+
+			/**
+			 * Removes all files.
+			 *
+			 * @method removeAllFiles
+			 *
+			 */
+			removeAllFiles : function() {
+				var i;
+
+				for (i = files.length - 1; i >= 0; i--)
+				{
+					return this.splice(i, 1)[0];
+				}
+			},
+
 			/**
 			 * Removes part of the queue and returns the files removed. This will also trigger the FilesRemoved and QueueChanged events.
 			 *
