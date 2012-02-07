@@ -49,6 +49,8 @@ package com.plupload {
 		private var _multipart:Boolean, _fileDataName:String, _chunking:Boolean, _chunk:int, _chunks:int, _chunkSize:int, _postvars:Object;
 		private var _headers:Object, _settings:Object;
 		private var _resumable:Boolean;
+		private var _resuming:Boolean;
+		private var _resumeAttempt:Number;
 
 		/**
 		 * Id property of file.
@@ -85,7 +87,7 @@ package com.plupload {
 		public function set resumable(value:Boolean):void {
 			this._resumable = value;
 		}
-
+		
 		/**
 		 * Constructs a new file object.
 		 *
@@ -97,6 +99,8 @@ package com.plupload {
 			this._fileRef = file_ref;
 			this._size = file_ref.size;
 			this._fileName = file_ref.name;
+			this._resuming = false;
+			this._resumeAttempt = 0;
 		}
 		
 		/**
@@ -112,6 +116,18 @@ package com.plupload {
 		}
 
 		/**
+		 * Resume current upload.
+		 */
+		public function resumeUpload(url:String, settings:Object): void
+		{
+			this._resuming = true;
+			this._resumeAttempt++;
+			//Plupload.debug("Resuming upload, attempt: " + this._resumeAttempt);
+			
+			this.uploadNextChunk();
+		}
+
+		/**
 		 * Uploads a the file to the specified url. This method will upload it as a normal
 		 * multipart file upload if the file size is smaller than the chunk size. But if the file is to
 		 * large it will be chunked into multiple requests.
@@ -123,11 +139,11 @@ package com.plupload {
 			this._settings = settings;
 
 			if (this.canUseSimpleUpload(settings)) {
-				Plupload.debug("Using simple upload");
-				this.simpleUpload(url, settings);
+				//Plupload.debug("Using simple upload");
+				this.simpleUpload(url, this._settings);
 			} else {
-				Plupload.debug("Using advanced upload");
-				this.advancedUpload(url, settings);
+				//Plupload.debug("Using advanced upload");
+				this.advancedUpload(url, this._settings);
 			}
 		}
 
@@ -139,7 +155,7 @@ package com.plupload {
 			var chunking:Boolean = (settings["chunk_size"] > 0);
 
 			// Check if it's not an image, chunking is disabled, multipart enabled and the ref_upload setting isn't forced
-			return (!(/\.(jpeg|jpg|png)$/i.test(this._fileName)) || !resize) && multipart && !chunking && !settings.urlstream_upload && !settings.headers;
+			return (!(/\.(jpeg|jpg|png)$/i.test(this._fileName)) || !resize) && multipart && !chunking && !settings.urlstream_upload && !settings.headers && !settings.resumable;
 		}
 
 		public function simpleUpload(url:String, settings:Object):void {
@@ -237,7 +253,7 @@ package com.plupload {
 			this._mimeType = settings.mime;
 			this._resumable = new Boolean(settings.resumable);
 			
-			Plupload.debug("Resumable: " + this._resumable);
+			//Plupload.debug("Resumable: " + this._resumable);
 
 			multipart = new Boolean(settings["multipart"]);
 			fileDataName = new String(settings["file_data_name"]);
@@ -268,6 +284,8 @@ package com.plupload {
 						chunkSize = file._size;
 						chunks = 1;
 					}
+					
+					//Plupload.debug("chunkSize: " + chunkSize)
 
 					// Start uploading the scaled down image
 					file._multipart = multipart;
@@ -351,17 +369,51 @@ package com.plupload {
 			else
 				fileData = this._fileRef.data;
 
-			Plupload.debug("At chunk " + this._chunk + "/" + this._chunks)
-			Plupload.debug("Starting at file position: " + fileData.position);
+			// Make sure our _chunk position matches the fileData.position
+			if (this._resuming)
+			{
+				//Plupload.debug("Resuming in uploadNextChunk(); at chunk " + this._chunk + "/" + this._chunks);
+				this._resuming = false;
+
+				var testPosition:Number = this._chunkSize * this._chunk;
+				//Plupload.debug("chunk: " + this._chunk + ", fileData.position: " + fileData.position + ", test: " + testPosition);
+				if (testPosition < fileData.position)
+				{
+					//this._chunk = fileData.position / this._chunkSize;
+					//Plupload.debug("resetting chunk to " + this._chunk);
+					
+					//Plupload.debug("resetting position to " + testPosition);
+					fileData.position = testPosition;
+					
+					// All chunks uploaded?
+					if (this._chunk >= this._chunks) {
+						// Clean up memory
+						if(this._fileRef.data) {
+							this._fileRef.data.clear();
+						}
+						this._imageData = null;
+		
+						return false;
+					}
+				}
+			}
+
+
+
+			//Plupload.debug("At chunk " + this._chunk + "/" + this._chunks)
+			//Plupload.debug("Starting at file position: " + fileData.position);
 			if (this._headers) {
-				this._headers["X-Content-Range"] = "bytes " + fileData.position + "-" + (fileData.position + this._chunkSize - 1 > fileData.length ? (fileData.length - 1) : fileData.position + this._chunkSize - 1) + "/" + (fileData.length - 1);
-				Plupload.debug("X-Content-Range: " + this._headers["X-Content-Range"])
+				//Plupload.debug("Chunk size: " + this._chunkSize);
+				//Plupload.debug("Position: " + fileData.position);
+				
+				this._headers["X-Content-Range"] = "bytes " + fileData.position + "-" + (fileData.position + this._chunkSize - 1 >= fileData.length ? (fileData.length - 1) : fileData.position + this._chunkSize - 1) + "/" + (fileData.length);
+				//Plupload.debug("X-Content-Range: " + this._headers["X-Content-Range"])
 			}
 
 			fileData.readBytes(chunkData, 0, fileData.position + this._chunkSize > fileData.length ? fileData.length - fileData.position : this._chunkSize);
 			
-			Plupload.debug("fileData length " + fileData.length + "; bytesAvailable: " + fileData.bytesAvailable);
-			Plupload.debug("chunkData length " + chunkData.length + "; bytesAvailable: " + chunkData.bytesAvailable);
+			//Plupload.debug("fileData length " + fileData.length + "; bytesAvailable: " + fileData.bytesAvailable);
+			//Plupload.debug("chunkData length " + chunkData.length + "; bytesAvailable: " + chunkData.bytesAvailable);
 
 
 
@@ -414,7 +466,7 @@ package com.plupload {
 
 			// Add name and chunk/chunks to URL if we use direct streaming method
 			if (!this._multipart && !this._resumable) {
-				Plupload.debug("Messing up the URL");
+
 				if (url.indexOf('?') == -1)
 					url += '?';
 				else
@@ -434,7 +486,7 @@ package com.plupload {
 			// Add custom headers
 			if (this._headers) {
 				for (var headerName:String in this._headers) {
-					Plupload.debug("Header: " + headerName + ": " + this._headers[headerName]);
+					//Plupload.debug("Header: " + headerName + ": " + this._headers[headerName]);
 					req.requestHeaders.push(new URLRequestHeader(headerName, this._headers[headerName]));
 				}
 			}
