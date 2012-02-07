@@ -362,7 +362,7 @@ package com.plupload {
 
 		private function resumeUpload(id:String, url:String, settings:Object):void {
 			if (this.currentFile) {
-				Plupload.debug("Attempting to resume...");
+				//Plupload.debug("Attempting to resume...");
 				this.currentFile.resumeUpload(url, settings);
 			}
 		}
