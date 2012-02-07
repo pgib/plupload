@@ -202,7 +202,28 @@
 						file_data_name : settings.file_data_name,
 						format : /\.(jpg|jpeg)$/i.test(file.name) ? 'jpg' : 'png',
 						headers : settings.headers,
-						urlstream_upload : settings.urlstream_upload
+						urlstream_upload : settings.urlstream_upload,
+						resumable: settings.resumable
+					});
+				});
+
+				uploader.bind("ResumeUpload", function(up, file) {
+					var settings = up.settings, resize = uploader.settings.resize || {};
+
+					getFlashObj().resumeUpload(lookup[file.id], settings.url, {
+						name : file.target_name || file.name,
+						mime : plupload.mimeTypes[file.name.replace(/^.+\.([^.]+)/, '$1').toLowerCase()] || 'application/octet-stream',
+						chunk_size : settings.chunk_size,
+						width : resize.width,
+						height : resize.height,
+						quality : resize.quality,
+						multipart : settings.multipart,
+						multipart_params : settings.multipart_params || {},
+						file_data_name : settings.file_data_name,
+						format : /\.(jpg|jpeg)$/i.test(file.name) ? 'jpg' : 'png',
+						headers : settings.headers,
+						urlstream_upload : settings.urlstream_upload,
+						resumable: settings.resumable
 					});
 				});
 				
