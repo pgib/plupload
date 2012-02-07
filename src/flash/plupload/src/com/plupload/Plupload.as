@@ -120,6 +120,7 @@ package com.plupload {
 			ExternalInterface.addCallback('clearQueue', this.clearFiles);
 			ExternalInterface.addCallback('setFileFilters', this.setFileFilters);
 			ExternalInterface.addCallback('uploadNextChunk', this.uploadNextChunk);
+			ExternalInterface.addCallback('resumeUpload', this.resumeUpload);
 
 			this.fireEvent("Init");
 		}
@@ -352,6 +353,17 @@ package com.plupload {
 		private function cancelUpload(): void {
 			if (this.currentFile) {
 				this.currentFile.cancelUpload();
+			}
+		}
+
+		/**
+		 * Resume upload.
+		 */
+
+		private function resumeUpload(id:String, url:String, settings:Object):void {
+			if (this.currentFile) {
+				Plupload.debug("Attempting to resume...");
+				this.currentFile.resumeUpload(url, settings);
 			}
 		}
 
